@@ -121,6 +121,6 @@ contract ArtGallary{
             return false;
         }
     }
-
+    //TODO(shubham): finalized smart contract ,testing remaining.
 
 }
