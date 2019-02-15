@@ -1,0 +1,24 @@
+{
+  "name": "art-gallery-ethereum-",
+  "version": "1.0.0",
+  "description": "nodejs application to interact with smart contract",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shubhamhapse/Art-Gallery-Ethereum-.git"
+  },
+  "author": "Shubham Hapse",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/shubhamhapse/Art-Gallery-Ethereum-/issues"
+  },
+  "homepage": "https://github.com/shubhamhapse/Art-Gallery-Ethereum-#readme",
+  "dependencies": {
+    "ethereumjs-testrpc": "^6.0.3",
+    "solc": "^0.4.25",
+    "web3": "^0.20.1"
+  }
+}

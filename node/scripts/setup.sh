@@ -6,5 +6,5 @@ sudo apt-get install -y ethereum
 sudo apt-get install ethereum-swarm
 
 #init nonbootnode in network
-geth --datadir ../private init ../private/intelligixnew.json
+geth --datadir ../private init ../private/genesis.json
 
