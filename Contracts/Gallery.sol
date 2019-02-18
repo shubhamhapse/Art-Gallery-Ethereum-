@@ -3,14 +3,16 @@ pragma solidity >=0.4.22 <0.6.0;
 contract ArtGallary{
     enum validation {Done,Remaining}
     enum winner {Declared,NotDeclared}
-    enum voting {NotStarted,Started,Done}
     address private owner;
-    uint private ts;
+    uint private tsDeployment;
     uint private registrationTimeout;
+    uint private votingTO;
+    uint private validationDoneTimestamp;
     uint private paintingID;
     uint registrationFee=100000000000000000;
     uint winnerPaintingID;
 
+    //fields associated with Painting
     struct Painting{
         address artist;
         string Name;
@@ -20,13 +22,18 @@ contract ArtGallary{
     }
     validation state;
     winner result;
-    voting voteProcess;
+
+    //map to store registreded paintings.
     mapping (uint => Painting) public registeredPaintings;
+
+    //map to store paintings which are certified by museum
     mapping (uint => bool) public  certifiedPaintings;
+
+    //Double vote is not allowd
+    mapping (address => bool) voted;
 
     uint[] public certifiedPaintingsArray;
 
-    mapping (address => bool) voted;
 
     modifier onlyOwner(){
         require(owner == msg.sender);
@@ -37,13 +44,22 @@ contract ArtGallary{
         _;
     }
 
-    modifier isBeforeTO() {
-        require(now-ts<registrationTimeout);
+    modifier isBeforeRegistrationTO() {
+        require(now-tsDeployment<registrationTimeout);
         _;
     }
 
-    modifier isAfterTO() {
-        require(now-ts>registrationTimeout);
+    modifier isBeforeVotingTO() {
+        require(now-validationDoneTimestamp<registrationTimeout);
+        _;
+    }
+
+    modifier isAfterVotingTO() {
+        require(now-validationDoneTimestamp>registrationTimeout);
+        _;
+    }
+    modifier isAfterRegistrationTO() {
+        require(now-tsDeployment>registrationTimeout);
         _;
     }
 
@@ -51,31 +67,40 @@ contract ArtGallary{
         require(state==validation.Done);
         _;
     }
-    constructor(uint _registrationTimeout) public {
+    //input registrationTimeout and votingTimeout
+    //Voting time window will activate only after museum validated paintings.
+    constructor(uint _registrationTimeout,uint _votingTO) public {
         owner=msg.sender;
-        ts=now;
+        tsDeployment=now;
         registrationTimeout=_registrationTimeout;
+        votingTO=_votingTO;
         state = validation.Remaining;
         result= winner.NotDeclared;
     }
 
-    function registerArtist(string memory _name,string memory _url,string memory _emailID) public isBeforeTO checkFee payable{
+    //Register painting with given details.
+    // map it with unique uint ID.
+    function registerPainting(string memory _name,string memory _url,string memory _emailID) public isBeforeRegistrationTO checkFee payable{
         registeredPaintings[paintingID]=Painting( msg.sender, _name, _url, _emailID, 0);
         paintingID++;
     }
 
-    function validatePaintings(uint256 id) public onlyOwner isAfterTO{
+    //only owner can validate.
+    function validatePaintings(uint256 id) public onlyOwner isAfterRegistrationTO{
         certifiedPaintings[id]=true;
         certifiedPaintingsArray.push(id);
     }
 
+    //start time window for voting.
     function validationDone() public onlyOwner {
         state=validation.Done;
-        voteProcess=voting.Started;
+        validationDoneTimestamp=now;
+        //started voting time period
     }
 
-    function vote(uint256 _id) public arePaintingsValidated{
-        require (voteProcess == voting.Started);
+    //vote transaction
+    //check if previously voted or not.
+    function vote(uint256 _id) public arePaintingsValidated isBeforeVotingTO{
         if(certifiedPaintings[_id]==true){
             if(voted[msg.sender]==false){
                 voted[msg.sender]=true;
@@ -84,16 +109,14 @@ contract ArtGallary{
         }
     }
 
-    function stopVoting() public onlyOwner {
-        voteProcess=voting.Done;
-    }
 
-    function declareWinner() public returns (address){
-        require (voteProcess == voting.Done);
+    //returns winners eth address.
+    function declareWinner() public isAfterVotingTO returns (address)  {
         require (result == winner.NotDeclared);
         if(certifiedPaintingsArray.length>0){
             winnerPaintingID=certifiedPaintingsArray[0];
             for (uint i=1 ; i< certifiedPaintingsArray.length;i++){
+                //TODO(Shubham): needs to decide what to do if both has same votes.
                 if(registeredPaintings[winnerPaintingID].totalVotes < registeredPaintings[certifiedPaintingsArray[i]].totalVotes){
                     winnerPaintingID=certifiedPaintingsArray[i];
                 }
@@ -105,32 +128,33 @@ contract ArtGallary{
         //TODO(Shubham):needs to handle condition where smart contract has some ethers but none of the paintigs are valid.
     }
 
+    //only winner can claim money
     function claimReward() public {
         require(result==winner.Declared);
         require(msg.sender==registeredPaintings[winnerPaintingID].artist);
         msg.sender.transfer(address(this).balance);
     }
 
+    //return total fee collected
     function getBalance() public view returns (uint256){
         return address(this).balance;
     }
 
+    //check if registration is still on.
     function isRegistrationClosed() public view returns (bool){
-        if(now-ts>registrationTimeout){
+        if(now-tsDeployment>registrationTimeout){
             return true;
         }else{
             return false;
         }
     }
 
-    function timeoutstatus() public view isBeforeTO returns (bool) {
-        return true;
-    }
-
+    //totla no of paintings
     function getTotalPaintings() public view returns (uint256){
         return paintingID;
     }
 
+    //according to ID return painting info
     function getPaintingInfo(uint id) public view returns(uint, string memory,string memory,string memory,uint256){
         Painting memory p = registeredPaintings[id];
         return(id, p.Name, p.Url, p.emailID, p.totalVotes);
@@ -140,8 +164,8 @@ contract ArtGallary{
         return certifiedPaintings[id];
     }
 
-    function isVotingStarted()public view returns(bool){
-        if(state==validation.Done){
+    function isVotingON()public view returns(bool){
+        if(state==validation.Done && now-validationDoneTimestamp < registrationTimeout){
             return true;
         }
         else {
