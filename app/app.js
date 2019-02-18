@@ -1,14 +1,19 @@
 const Web3 = require('web3');
 const fs = require('fs');
 const solc = require('solc');
+const express = require('express');
+const Tx = require('ethereumjs-tx')
+
+const port = 3000;
+const app = express();
 
 //replace this with your ethereum address and credentials.
-const accountAddress = '0xc389b199ac6f28856857e0340d343462aba5ff3d'; // user
-const privateKeyPass = ''
-const timeout = 320;// registration time out in sec.
-const contractAddressGlobal='0x8742dbB21277e478Cb3aF44F751aDcdBA299853f';
+const accountAddress1='0xc389b199ac6f28856857e0340d343462aba5ff3d'
+const privateKeyPass = 'shubham'
 
-
+const timeoutRegistration = 320;// registration time out in sec.
+const timeoutVoting = 320;
+const contractAddressGlobal = '0x0123a288f45960a4e74bd1181a1207976222aef6';
 
 
 var abi, bytecode, MyContract;
@@ -30,17 +35,18 @@ function compile() {
     }
 }
 
-function deployContract() {
+function deployContract(address, pass) {
     let gasEstimate = web3.eth.estimateGas({data: '0x' + bytecode});
     MyContract = new web3.eth.Contract(abi);
 
-    web3.eth.personal.unlockAccount(accountAddress, privateKeyPass, 1000);
+    web3.eth.personal.unlockAccount(address, pass, 1000).then(()=>{
+
     MyContract.deploy({
-        arguments: [timeout],
+        arguments: [timeoutRegistration,timeoutVoting],
         data: '0x' + bytecode,
     })
         .send({
-            from: accountAddress,
+            from: address,
             gas: 4000000,
             gasPrice: '300000000',
         }, (err, txHash) => {
@@ -52,6 +58,8 @@ function deployContract() {
         .on('transactionHash', (err) => {
             console.log('transactionHash:', err);
         });
+    });
+
 }
 
 function getContractBalance(contractAddress) {
@@ -63,42 +71,42 @@ function getContractBalance(contractAddress) {
 
 function isRegistrationClosed(contractAddress) {
     var contractInstance = new web3.eth.Contract(abi, contractAddress);
-    contractInstance.methods.timeoutstatus().call().then(e => {
+    contractInstance.methods.isRegistrationClosed().call().then(e => {
         console.log(e)
     })
 }
 
-function isVotingStated(contractAddress) {
+function isVotingOn(contractAddress) {
     var contractInstance = new web3.eth.Contract(abi, contractAddress);
-    contractInstance.methods.isVotingStarted().call().then(e => {
+    contractInstance.methods.isVotingON().call().then(e => {
         console.log(e)
     })
 }
 
-function isCertifiedPainting(id,contractAddress) {
+function isCertifiedPainting(id, contractAddress) {
     var contractInstance = new web3.eth.Contract(abi, contractAddress);
     contractInstance.methods.isCertifiedPainting(id).call().then(e => {
         console.log(e)
     })
 }
 
-function listAllPaintings(contractAddress){
+function listAllPaintings(contractAddress) {
     var contractInstance = new web3.eth.Contract(abi, contractAddress);
     contractInstance.methods.getTotalPaintings().call().then(e => {
         console.log(e)
-        for (let i=0;i<e;i++){
-            contractInstance.methods.getPaintingInfo(i).call().then(e=>{
+        for (let i = 0; i < e; i++) {
+            contractInstance.methods.getPaintingInfo(i).call().then(e => {
                 console.log(e)
             })
         }
     })
 }
 
-function listAllValidatedPaintings(contractAddress){
+function listAllValidatedPaintings(contractAddress) {
     var contractInstance = new web3.eth.Contract(abi, contractAddress);
     contractInstance.methods.getTotalPaintings().call().then(count => {
-        for (let i=0;i<count;i++){
-            contractInstance.methods.isCertifiedPainting(i).call().then(result=>{
+        for (let i = 0; i < count; i++) {
+            contractInstance.methods.isCertifiedPainting(i).call().then(result => {
                 console.log(result)
             })
         }
@@ -107,7 +115,7 @@ function listAllValidatedPaintings(contractAddress){
 
 function registerArtist(addrArtist, pass, name, url, email, contractAddress) {
     var contractInstance = new web3.eth.Contract(abi, contractAddress);
-    var method = contractInstance.methods.registerArtist(name, url, email);
+    var method = contractInstance.methods.registerPainting(name, url, email);
     var encodedABI = method.encodeABI();
     var n;
 
@@ -128,23 +136,23 @@ function registerArtist(addrArtist, pass, name, url, email, contractAddress) {
         web3.eth.personal.unlockAccount(addrArtist, pass, 1000);
         web3.eth.signTransaction(tx).then(signed => {
             let tran = web3.eth.sendSignedTransaction(signed.raw);
-
+/*
             tran.on('confirmation', (confirmationNumber, receipt) => {
                 console.log('confirmation: ' + confirmationNumber);
             });
-
+*/
             tran.on('transactionHash', hash => {
                 console.log('hash');
                 console.log(hash);
             });
-
+/*
             tran.on('receipt', receipt => {
                 console.log('reciept');
                 console.log(receipt);
             });
 
             tran.on('error', console.error);
-        });
+*/        });
     })
 }
 
@@ -192,48 +200,6 @@ function vote(address, pass, paintingID, contractAddress) {
 }
 
 
-function stopVoting(address, pass, contractAddress) {
-    var contractInstance = new web3.eth.Contract(abi, contractAddress);
-    var method = contractInstance.methods.stopVoting();
-    var encodedABI = method.encodeABI();
-    var n;
-
-    web3.eth.getTransactionCount(address).then(_nonce => {
-        n = '0x' + _nonce.toString(16);
-        console.log(n)
-        var tx = {
-            from: address,
-            to: contractAddress,
-            gas: 2000000,
-            gasPrice: '300000000',
-            data: encodedABI,
-            value: 0,
-            nonce: n
-
-        };
-        console.log(tx)
-        web3.eth.personal.unlockAccount(address, pass, 1000);
-        web3.eth.signTransaction(tx).then(signed => {
-            let tran = web3.eth.sendSignedTransaction(signed.raw);
-
-            tran.on('confirmation', (confirmationNumber, receipt) => {
-                console.log('confirmation: ' + confirmationNumber);
-            });
-
-            tran.on('transactionHash', hash => {
-                console.log('hash');
-                console.log(hash);
-            });
-
-            tran.on('receipt', receipt => {
-                console.log('reciept');
-                console.log(receipt);
-            });
-
-            tran.on('error', console.error);
-        });
-    })
-}
 
 function declareWinner(address, pass, contractAddress) {
     var contractInstance = new web3.eth.Contract(abi, contractAddress);
@@ -258,28 +224,28 @@ function declareWinner(address, pass, contractAddress) {
         web3.eth.personal.unlockAccount(address, pass, 1000);
         web3.eth.signTransaction(tx).then(signed => {
             let tran = web3.eth.sendSignedTransaction(signed.raw);
-
+/*
             tran.on('confirmation', (confirmationNumber, receipt) => {
                 console.log('confirmation: ' + confirmationNumber);
             });
-
+*/
             tran.on('transactionHash', hash => {
                 console.log('hash');
                 console.log(hash);
             });
-
+/*
             tran.on('receipt', receipt => {
                 console.log('reciept');
                 console.log(receipt);
             });
 
             tran.on('error', console.error);
-        });
+*/        });
     })
 }
 
 
-function validatePainting(addressOwner, pass,paintingId, contractAddress) {
+function validatePainting(addressOwner, pass, paintingId, contractAddress) {
     var contractInstance = new web3.eth.Contract(abi, contractAddress);
     var method = contractInstance.methods.validatePaintings(paintingId);
     var encodedABI = method.encodeABI();
@@ -302,23 +268,23 @@ function validatePainting(addressOwner, pass,paintingId, contractAddress) {
         web3.eth.personal.unlockAccount(addressOwner, pass, 1000);
         web3.eth.signTransaction(tx).then(signed => {
             let tran = web3.eth.sendSignedTransaction(signed.raw);
-
+/*
             tran.on('confirmation', (confirmationNumber, receipt) => {
                 console.log('confirmation: ' + confirmationNumber);
             });
-
+*/
             tran.on('transactionHash', hash => {
                 console.log('hash');
                 console.log(hash);
             });
-
+/*
             tran.on('receipt', receipt => {
                 console.log('reciept');
                 console.log(receipt);
             });
 
             tran.on('error', console.error);
-        });
+ */       });
     })
 }
 
@@ -346,23 +312,24 @@ function validationDone(addressOwner, pass, contractAddress) {
         web3.eth.personal.unlockAccount(addressOwner, pass, 1000);
         web3.eth.signTransaction(tx).then(signed => {
             let tran = web3.eth.sendSignedTransaction(signed.raw);
-
+/*
             tran.on('confirmation', (confirmationNumber, receipt) => {
                 console.log('confirmation: ' + confirmationNumber);
             });
-
+*/
             tran.on('transactionHash', hash => {
                 console.log('hash');
                 console.log(hash);
             });
-
+/*
             tran.on('receipt', receipt => {
                 console.log('reciept');
                 console.log(receipt);
             });
 
             tran.on('error', console.error);
-        });
+ */       });
+
     })
 }
 
@@ -389,45 +356,42 @@ function claimReward(addressOwner, pass, contractAddress) {
         web3.eth.personal.unlockAccount(addressOwner, pass, 1000);
         web3.eth.signTransaction(tx).then(signed => {
             let tran = web3.eth.sendSignedTransaction(signed.raw);
-
+/*
             tran.on('confirmation', (confirmationNumber, receipt) => {
                 console.log('confirmation: ' + confirmationNumber);
             });
-
+*/
             tran.on('transactionHash', hash => {
                 console.log('hash');
                 console.log(hash);
             });
 
-            tran.on('receipt', receipt => {
+/*            tran.on('receipt', receipt => {
                 console.log('reciept');
                 console.log(receipt);
             });
 
             tran.on('error', console.error);
-        });
+*/        });
     })
 }
 
-
-
-
-
-
-
-console.log("compilation started")
+//console.log("compilation started")
 compile() //dont comment this
 
 
 // first step-> deploy contract and update contractAddressGlobal variable for next use comment after that
-deployContract()
+deployContract(accountAddress1, "shubham")
+
 
 //register artist with painting details
-registerArtist(accountAddress,privateKeyPass,"shubham","url://sam#.jpg","shapse778@gmail.com",contractAddressGlobal)
+registerArtist(accountAddress, privateKeyPass, "shubham1", "url://sam#.jpg", "shapse778@gmail.com", contractAddressGlobal)
 //can add multiple such paintings within timeout given in const.
+
 
 //It will return balance deposited in contract after registration of painting
 getContractBalance(contractAddressGlobal)
+
 
 //lists all paintings that are registered for competition.
 //contains ID, name ,url, email, total votes to that painting.
@@ -435,14 +399,15 @@ listAllPaintings(contractAddressGlobal)
 
 
 //contract state variable check
-isVotingStated(contractAddressGlobal)
+isVotingOn(contractAddressGlobal)
 isRegistrationClosed(contractAddressGlobal) //checks for timeout
 
 
-//only after registration time out you can call this function
-//paintingID is the id of painting that needs to approve
-//only museum can call this
-validatePainting(accountAddress,privateKeyPass,0,contractAddressGlobal)
+/*  only after registration time out you can call this function
+*    paintingID is the id of painting that needs to approve
+*    only museum can call this
+*/
+validatePainting(accountAddress,privateKeyPass,1,contractAddressGlobal)
 
 
 //after validation of paintings need to start voting
@@ -459,9 +424,6 @@ listAllValidatedPaintings(contractAddressGlobal)
 //people can vote
 vote(accountAddress,privateKeyPass,0,contractAddressGlobal)
 
-//after some time museum can stop voting process
-stopVoting(accountAddress,privateKeyPass,contractAddressGlobal)
-
 //after voting anyone can asks for winner.
 declareWinner(accountAddress,privateKeyPass,contractAddressGlobal)
 
@@ -476,3 +438,19 @@ claimReward(accountAddress,privateKeyPass,contractAddressGlobal)
 
 //all this functions needs to run one by one and in orderly fashion.
 //state variable rejects unexpected transaction like voting before validation etc.
+
+
+
+app.post('/api/create',function (req,res) {
+    res.send(web3.eth.accounts.create())
+})
+
+
+app.listen(port, function () {
+    console.log("Server is running on "+ port +" port");
+});
+
+
+
+
+
