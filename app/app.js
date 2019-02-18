@@ -3,17 +3,19 @@ const fs = require('fs');
 const solc = require('solc');
 const express = require('express');
 const Tx = require('ethereumjs-tx')
+const bodyParser = require('body-parser')
 
 const port = 3000;
 const app = express();
+app.use(bodyParser());
 
 //replace this with your ethereum address and credentials.
-const accountAddress1='0xc389b199ac6f28856857e0340d343462aba5ff3d'
+const accountAddress='0xc389b199ac6f28856857e0340d343462aba5ff3d'
 const privateKeyPass = 'shubham'
 
 const timeoutRegistration = 320;// registration time out in sec.
 const timeoutVoting = 320;
-const contractAddressGlobal = '0x0123a288f45960a4e74bd1181a1207976222aef6';
+const contractAddressGlobal = '0xba7fc5ff2dfd66a8556c8b27bcd48fb3ed665bbb';
 
 
 var abi, bytecode, MyContract;
@@ -62,6 +64,37 @@ function deployContract(address, pass) {
 
 }
 
+const deploy = async(account,privateKeyinp)=>{
+    var privateKey = new Buffer(privateKeyinp, 'hex')
+
+    var contract = new web3.eth.Contract(abi);
+    const hexdata = contract.deploy({
+        data: '0x' + bytecode,
+        arguments:[timeoutRegistration,timeoutVoting]
+    }).encodeABI()
+
+    const nonce = await web3.eth.getTransactionCount( account );
+    const nonceHex = web3.utils.toHex(nonce)
+    const gasPriceHex = web3.utils.toHex(18000000000);
+    const gasLimit = 923600;
+    const gasLimitHex = web3.utils.toHex(gasLimit);
+    var rawTx = {
+        nonce: nonceHex,
+        gasPrice: gasPriceHex,
+        gasLimit: gasLimitHex,
+        data: "0x"+hexdata,
+        from:account
+    }
+
+    var tx = new Tx(rawTx);
+    tx.sign(privateKey);
+
+    var serializedTx = tx.serialize();
+
+    web3.eth.sendSignedTransaction('0x' + serializedTx.toString('hex'))
+        .on('receipt', console.log);
+
+};
 function getContractBalance(contractAddress) {
     var contractInstance = new web3.eth.Contract(abi, contractAddress);
     contractInstance.methods.getBalance().call().then(e => {
@@ -244,48 +277,34 @@ function declareWinner(address, pass, contractAddress) {
     })
 }
 
+function validatePainting(addressOwner, privateKeyinp, paintingId){
+    var privateKey = new Buffer(privateKeyinp, 'hex')
 
-function validatePainting(addressOwner, pass, paintingId, contractAddress) {
-    var contractInstance = new web3.eth.Contract(abi, contractAddress);
+    var contractInstance = new web3.eth.Contract(abi, contractAddressGlobal);
     var method = contractInstance.methods.validatePaintings(paintingId);
     var encodedABI = method.encodeABI();
-    var n;
-
-    web3.eth.getTransactionCount(addressOwner).then(_nonce => {
-        n = '0x' + _nonce.toString(16);
+    const n =  web3.eth.getTransactionCount( addressOwner ).then(n=>{
         console.log(n)
-        var tx = {
-            from: addressOwner,
-            to: contractAddress,
+        var t = {
+            from:addressOwner,
+            to : contractAddressGlobal,
+            data : encodedABI,
             gas: 2000000,
-            gasPrice: '300000000',
-            data: encodedABI,
-            value: 0,
-            nonce: n
+            gasPrice: '300000',
+            nonce:n
+        }
+        console.log(t)
+        const tx = new Tx(t);
+        tx.sign(privateKey);
 
-        };
-        console.log(tx)
-        web3.eth.personal.unlockAccount(addressOwner, pass, 1000);
-        web3.eth.signTransaction(tx).then(signed => {
-            let tran = web3.eth.sendSignedTransaction(signed.raw);
-/*
-            tran.on('confirmation', (confirmationNumber, receipt) => {
-                console.log('confirmation: ' + confirmationNumber);
-            });
-*/
-            tran.on('transactionHash', hash => {
-                console.log('hash');
-                console.log(hash);
-            });
-/*
-            tran.on('receipt', receipt => {
-                console.log('reciept');
-                console.log(receipt);
-            });
+        const serializedTx = tx.serialize();
+        //web3.eth.sendSignedTransaction(signed.rawTransaction).on('receipt', console.log)
 
-            tran.on('error', console.error);
- */       });
-    })
+        web3.eth.sendSignedTransaction('0x' + serializedTx.toString('hex'))
+            .on('receipt', console.log);
+    });
+
+
 }
 
 
@@ -379,7 +398,7 @@ function claimReward(addressOwner, pass, contractAddress) {
 //console.log("compilation started")
 compile() //dont comment this
 
-
+/*
 // first step-> deploy contract and update contractAddressGlobal variable for next use comment after that
 deployContract(accountAddress1, "shubham")
 
@@ -403,16 +422,18 @@ isVotingOn(contractAddressGlobal)
 isRegistrationClosed(contractAddressGlobal) //checks for timeout
 
 
-/*  only after registration time out you can call this function
-*    paintingID is the id of painting that needs to approve
-*    only museum can call this
-*/
-validatePainting(accountAddress,privateKeyPass,1,contractAddressGlobal)
+//  only after registration time out you can call this function
+//     paintingID is the id of painting that needs to approve
+//    only museum can call this
+//
+
+
+//validatePainting(accountAddress,privateKeyPass,1,contractAddressGlobal)
 
 
 //after validation of paintings need to start voting
 // meaning -> validation done now start voting.
-validationDone(accountAddress,privateKeyPass,contractAddressGlobal)
+//validationDone(accountAddress,privateKeyPass,contractAddressGlobal)
 
 
 //lists all validated paintings in true/false per line
@@ -440,12 +461,27 @@ claimReward(accountAddress,privateKeyPass,contractAddressGlobal)
 //state variable rejects unexpected transaction like voting before validation etc.
 
 
-
+*/
 app.post('/api/create',function (req,res) {
     res.send(web3.eth.accounts.create())
 })
+app.post('/api/deploy',function (req,res) {
+    console.log(req.body)
+    console.log(req.body.address)
+    console.log(req.body.privateKey)
+    deploy(req.body.address,req.body.privateKey).then((e)=>res.send(e))
 
+})
 
+app.put('/api/certify',function (req,res) {
+    console.log(req.body)
+    console.log(req.body.address)
+    console.log(req.body.privateKey)
+    console.log(req.body.paintingId)
+
+    validatePainting(req.body.address,req.body.privateKey,req.body.paintingId)
+
+})
 app.listen(port, function () {
     console.log("Server is running on "+ port +" port");
 });
