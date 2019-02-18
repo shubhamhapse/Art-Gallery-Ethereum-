@@ -7,7 +7,7 @@ contract ArtGallary{
     address private owner;
     uint private ts;
     uint private registrationTimeout;
-    uint paintingID;
+    uint private paintingID;
     uint registrationFee=100000000000000000;
     uint winnerPaintingID;
 
@@ -123,6 +123,31 @@ contract ArtGallary{
         }
     }
 
+    function timeoutstatus() public view isBeforeTO returns (bool) {
+        return true;
+    }
+
+    function getTotalPaintings() public view returns (uint256){
+        return paintingID;
+    }
+
+    function getPaintingInfo(uint id) public view returns(uint, string memory,string memory,string memory,uint256){
+        Painting memory p = registeredPaintings[id];
+        return(id, p.Name, p.Url, p.emailID, p.totalVotes);
+    }
+
+    function isCertifiedPainting(uint id) public view returns (bool){
+        return certifiedPaintings[id];
+    }
+
+    function isVotingStarted()public view returns(bool){
+        if(state==validation.Done){
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
 
 
 }
