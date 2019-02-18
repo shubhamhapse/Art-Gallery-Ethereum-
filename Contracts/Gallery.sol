@@ -88,7 +88,7 @@ contract ArtGallary{
         voteProcess=voting.Done;
     }
 
-    function declareWinner() public returns (uint256){
+    function declareWinner() public returns (address){
         require (voteProcess == voting.Done);
         require (result == winner.NotDeclared);
         if(certifiedPaintingsArray.length>0){
@@ -101,6 +101,7 @@ contract ArtGallary{
 
         }
         result=winner.Declared;
+        return registeredPaintings[winnerPaintingID].artist;
         //TODO(Shubham):needs to handle condition where smart contract has some ethers but none of the paintigs are valid.
     }
 
@@ -121,6 +122,7 @@ contract ArtGallary{
             return false;
         }
     }
-    //TODO(shubham): finalized smart contract ,testing remaining.
+
+
 
 }
